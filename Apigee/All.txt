@@ -1,5 +1,7 @@
 
-google apis: https://cloud.google.com/apigee/docs/reference/apis/apigee/rest/v1/organizations.instances.natAddresses/create?apix=true&apix_params=%7B%22parent%22%3A%22organizations%2F%7Borg%7D%2Finstances%2Feval-instance%22%2C%22resource%22%3A%7B%22name%22%3A%22eval-instance-ip%22%7D%7D
+google apis: 
+
+https://cloud.google.com/apigee/docs/reference/apis/apigee/rest/v1/organizations.instances.natAddresses/create?apix=true&apix_params=%7B%22parent%22%3A%22organizations%2F%7Borg%7D%2Finstances%2Feval-instance%22%2C%22resource%22%3A%7B%22name%22%3A%22eval-instance-ip%22%7D%7D
 
 Ticket: 
 
