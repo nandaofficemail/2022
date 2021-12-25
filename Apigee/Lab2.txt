@@ -1,0 +1,101 @@
+Lab 2:
+---------
+1) Add environment and environmentgroup , prod & prod-group
+2) Attach Eval to eval-instance:
+   export INSTANCE_NAME=eval-instance; 
+   export ENV_NAME=eval; 
+   export PREV_INSTANCE_STATE=; 
+   echo "waiting for runtime instance ${INSTANCE_NAME} to be active"; 
+   while : ; 
+   do 
+     export INSTANCE_STATE=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${GOOGLE_CLOUD_PROJECT}/instances/${INSTANCE_NAME}" | jq "select(.state != null) | .state"  --raw-output);
+   [[ "${INSTANCE_STATE}" == "${PREV_INSTANCE_STATE}" ]] || (echo; echo "INSTANCE_STATE=${INSTANCE_STATE}"); 
+   
+   export PREV_INSTANCE_STATE=${INSTANCE_STATE}; 
+   [[ "${INSTANCE_STATE}" != "ACTIVE" ]] || break; 
+   echo -n "."; sleep 5; 
+   done; 
+   echo; 
+   echo "instance created, waiting for environment ${ENV_NAME} to be attached to instance"; 
+   while : ; 
+   do 
+     export ATTACHMENT_DONE=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${GOOGLE_CLOUD_PROJECT}/instances/${INSTANCE_NAME}/attachments" | jq "select(.attachments != null) | .attachments[] | select(.environment == \"${ENV_NAME}\") | .environment" --join-output); 
+     [[ "${ATTACHMENT_DONE}" != "${ENV_NAME}" ]] || break; echo -n "."; 
+     sleep 5; done; 
+   
+   echo; 
+   echo "${ENV_NAME} environment attached"; 
+   echo "***ORG IS READY TO USE***";
+   
+   
+3) Attach Prod environment to the instanace :
+
+  export INSTANCE_NAME=eval-instance; 
+  curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "Content-Type: application/json" -X POST "https://apigee.googleapis.com/v1/organizations/${GOOGLE_CLOUD_PROJECT}/instances/${INSTANCE_NAME}/attachments" 
+     -d '{ "environment": "prod" }' | jq
+  
+4) Check the status of Prod attachment to eval-instance:
+
+  export ATTACHING_ENV=prod; 
+  export INSTANCE_NAME=eval-instance; 
+  echo "waiting for ${ATTACHING_ENV} attachment";
+  while : ; 
+    do 
+    export ATTACHMENT_DONE=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${GOOGLE_CLOUD_PROJECT}/instances/${INSTANCE_NAME}/attachments" | jq "select(.attachments != null) | .attachments[] | select(.environment == \"${ATTACHING_ENV}\") | .environment" --join-output); 
+    [[ "${ATTACHMENT_DONE}" != "${ATTACHING_ENV}" ]] || break; echo -n "."; 
+    sleep 5; 
+    done; 
+    echo; 
+    echo "***${ATTACHING_ENV} ENVIRONMENT ATTACHED***";
+    
+    
+5) Create an API proxy:
+
+  Develop > API Proxies > No Target
+  test-env
+  
+  Assign Message > AM-SetResponse / AM-SetResponse
+  
+   <AssignMessage continueOnError="false" enabled="true" name="AM-SetResponse">
+		<Set>
+			<Payload contentType="application/json">{
+		"environment": "{environment.name}",
+		"hostname": "{request.header.Host}"
+	}
+	</Payload>
+		</Set>
+		<IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+		<AssignTo createNew="true" transport="http" type="response"/>
+	</AssignMessage>
+	
+6) Deploy to both eval and prod environment above code
+7) Now query Eval and Prod environment:
+   
+   open ssh connection:
+   
+   export VM_NAME=apigeex-test-vm
+   export VM_ZONE=us-west1-a
+   gcloud compute ssh ${VM_NAME} --zone=${VM_ZONE} --force-key-file-overwrite
+   
+   set required variables to curl prod or eval env:
+   
+   export PROJECT_NAME=$(gcloud config get-value project)
+   export ORG=${PROJECT_NAME}
+   export INSTANCE_NAME=eval-instance
+   export INTERNAL_LB_IP=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET    "https://apigee.googleapis.com/v1/organizations/${ORG}/instances/${INSTANCE_NAME}" | jq ".host" --raw-output)
+   export EVAL_ENVGROUP_HOSTNAME=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${ORG}/envgroups/eval-group" | jq ".hostnames[0]" --raw-output)
+   export PROD_ENVGROUP_HOSTNAME=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${ORG}/envgroups/prod-group" | jq ".hostnames[0]" --raw-output)
+   echo "INTERNAL_LB_IP=${INTERNAL_LB_IP}"
+   echo "EVAL_ENVGROUP_HOSTNAME=${EVAL_ENVGROUP_HOSTNAME}"
+   echo "PROD_ENVGROUP_HOSTNAME=${PROD_ENVGROUP_HOSTNAME}"
+   
+   
+8) CALL test-env api in prod and eval environment:
+
+  curl -i -k --resolve "${EVAL_ENVGROUP_HOSTNAME}:443:${INTERNAL_LB_IP}" \
+  "https://${EVAL_ENVGROUP_HOSTNAME}/test-env"
+  
+  curl -i -k --resolve "${PROD_ENVGROUP_HOSTNAME}:443:${INTERNAL_LB_IP}" \
+  "https://${PROD_ENVGROUP_HOSTNAME}/test-env"
+   
+   
