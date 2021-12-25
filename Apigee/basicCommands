@@ -1,3 +1,10 @@
 export GOOGLE_CLOUD_PROJECT={project}
 echo ${GOOGLE_CLOUD_PROJECT}
 echo $(gcloud auth print-access-token)
+
+1) 
+ATTACH EVAL ENVRIOMENT TO EVAL-INSTANCE
+
+2) 
+OPEN - EXPORT - CURL
+
