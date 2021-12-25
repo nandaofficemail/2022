@@ -1,6 +1,6 @@
 Lab 2:
 ---------
-1) Add environment and environmentgroup , prod & prod-group
+1) Add environment and environmentgroup , prod (prod.example.com) & prod-group
 2) Attach Eval to eval-instance:
    export INSTANCE_NAME=eval-instance; 
    export ENV_NAME=eval; 
