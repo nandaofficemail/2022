@@ -1,0 +1,112 @@
+Lab 3:
+---------
+
+v1.organizations.instances  - organizations/{org}
+echo ${GOOGLE_CLOUD_PROJECT}
+export GOOGLE_CLOUD_PROJECT={project}
+
+1) Attach eval environment to eval-instance:
+
+export INSTANCE_NAME=eval-instance; 
+export ENV_NAME=eval; 
+export PREV_INSTANCE_STATE=; 
+echo "waiting for runtime instance ${INSTANCE_NAME} to be active";
+ while : ; 
+ 
+ do export INSTANCE_STATE=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${GOOGLE_CLOUD_PROJECT}/instances/${INSTANCE_NAME}" | jq "select(.state != null) | .state" --raw-output); [[ "${INSTANCE_STATE}" == "${PREV_INSTANCE_STATE}" ]] || (echo; echo "INSTANCE_STATE=${INSTANCE_STATE}"); 
+ export PREV_INSTANCE_STATE=${INSTANCE_STATE}; 
+ [[ "${INSTANCE_STATE}" != "ACTIVE" ]] || break; 
+ echo -n "."; 
+ sleep 5; 
+ done;
+  echo;
+   echo "instance created, waiting for environment ${ENV_NAME} to be attached to instance"; while : ; 
+   
+   do 
+   
+   export ATTACHMENT_DONE=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${GOOGLE_CLOUD_PROJECT}/instances/${INSTANCE_NAME}/attachments" | jq "select(.attachments != null) | .attachments[] | select(.environment == \"${ENV_NAME}\") | .environment" --join-output); [[ "${ATTACHMENT_DONE}" != "${ENV_NAME}" ]] || break; echo -n "."; 
+   sleep 5;
+    done; 
+    echo;
+     echo "${ENV_NAME} environment attached"; 
+     echo "***ORG IS READY TO USE***";
+     
+     
+     
+     
+ 3) Create API-Proxy:test-nat
+ 
+ Develop > API Proxies > Reverse proxy > Target - https://httpbin.org/ip
+ 
+ Open SSH-Conn:
+ 
+ export VM_NAME=apigeex-test-vm
+ export VM_ZONE=us-west1-a
+ gcloud compute ssh ${VM_NAME} --zone=${VM_ZONE} --force-key-file-overwrite
+ 
+ Set Required variables:
+ 
+ export PROJECT_NAME=$(gcloud config get-value project)
+ export ORG=${PROJECT_NAME}
+ export INSTANCE_NAME=eval-instance
+ export INTERNAL_LB_IP=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${ORG}/instances/${INSTANCE_NAME}" | jq ".host" --raw-output)
+ 
+ export EVAL_ENVGROUP_HOSTNAME=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${ORG}/envgroups/eval-group" | jq ".hostnames[0]" --raw-output)
+
+ echo "INTERNAL_LB_IP=${INTERNAL_LB_IP}"
+ echo "EVAL_ENVGROUP_HOSTNAME=${EVAL_ENVGROUP_HOSTNAME}"
+ 
+ Curl the API:
+ 
+ curl -k "https://${EVAL_ENVGROUP_HOSTNAME}/test-nat"
+ 
+ 
+ 
+ 
+ 
+ 4) CREATE NAT API, CHECK GET(RESERVED) - > active status
+ 
+ organizations.instances.natAddresses  > create 
+ organizations/{org}/instances/eval-instance  > name - eval-instance-ip
+ 
+ GET 
+ organizations.instances.natAddresses > get
+ organizations/{org}/instances/eval-instance/natAddresses/eval-instance-ip 
+ 
+ ACTIVATE :
+ organizations/{org}/instances/eval-instance/natAddresses/eval-instance-ip
+ 
+ 
+  GET 
+ organizations.instances.natAddresses > get
+ organizations/{org}/instances/eval-instance/natAddresses/eval-instance-ip 
+ 
+ 
+ 
+ 5) QUERY
+ 
+ OPEN SSH:
+ 
+ export VM_NAME=apigeex-test-vm
+export VM_ZONE=us-west1-a
+gcloud compute ssh ${VM_NAME} --zone=${VM_ZONE} --force-key-file-overwrite
+
+SET REQUIRED VARIABLES:
+
+export PROJECT_NAME=$(gcloud config get-value project)
+export ORG=${PROJECT_NAME}
+export INSTANCE_NAME=eval-instance
+export NAT_ADDR_NAME=eval-instance-ip
+export INTERNAL_LB_IP=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${ORG}/instances/${INSTANCE_NAME}" | jq ".host" --raw-output)
+export EVAL_ENVGROUP_HOSTNAME=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${ORG}/envgroups/eval-group" | jq ".hostnames[0]" --raw-output)
+export NAT_IP_ADDRESS=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${ORG}/instances/${INSTANCE_NAME}/natAddresses/${NAT_ADDR_NAME}" | jq ".ipAddress" --raw-output)
+echo "INTERNAL_LB_IP=${INTERNAL_LB_IP}"
+echo "EVAL_ENVGROUP_HOSTNAME=${EVAL_ENVGROUP_HOSTNAME}"
+echo "NAT_IP_ADDRESS=${NAT_IP_ADDRESS}"
+
+
+TEST-NAT:
+curl -k "https://${EVAL_ENVGROUP_HOSTNAME}/test-nat"
+
+both should be same:
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${ORG}/instances/${INSTANCE_NAME}/natAddresses/${NAT_ADDR_NAME}"
