@@ -1,0 +1,99 @@
+Lab4:
+-----------
+
+Protecting APIs with ApigeeX and Cloud Armor:
+
+Develop > Shared Flows > protect-json   ---------------------------
+Develop > JSON Threat Protection > JTP-Protect
+
+Admin > Environments > Flow Hooks. l----------------ink protect-json )
+
+
+Cloud Armor:
+------------------
+
+Network security > Cloud Armor.
+
+Create policy: 
+    name: protect-apis 
+	
+	Rule 1:
+	          Default rule action, select Deny.
+			  Deny status dropdown, select 404 (Not Found).
+			  
+    Rule 2:
+	          origin.region_code == 'US'
+			  Priority to 1000
+			  Action - Allow
+    Rule 3: 
+	          (Filter Malicious Requests )
+	          evaluatePreconfiguredExpr('sqli-stable', ['owasp-crs-v030001-id942251-sqli', 'owasp-crs-v030001-id942420-sqli', 'owasp-crs-v030001-id942431-sqli', 'owasp-crs-v030001-id942460-sqli', 'owasp-crs-v030001-id942421-sqli', 'owasp-crs-v030001-id942432-sqli'])
+			  Action - Deny - 403 (Forbidden).
+			  Priority to 500
+Attach Policy(protect-apis ) to Load-Balancer: apigee-proxy-backend(Target)			  
+
+
+
+Attach env to eval-instance and deploy hello-world:
+-------------------------------------------------------------------------
+
+export INSTANCE_NAME=eval-instance; export ENV_NAME=eval; 
+export PREV_INSTANCE_STATE=; echo "waiting for runtime instance ${INSTANCE_NAME} to be active"; 
+while : ; 
+
+do export INSTANCE_STATE=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${GOOGLE_CLOUD_PROJECT}/instances/${INSTANCE_NAME}" | jq "select(.state != null) | .state" --raw-output); [[ "${INSTANCE_STATE}" == "${PREV_INSTANCE_STATE}" ]] || (echo; echo "INSTANCE_STATE=${INSTANCE_STATE}"); 
+
+export PREV_INSTANCE_STATE=${INSTANCE_STATE}; [[ "${INSTANCE_STATE}" != "ACTIVE" ]] || break; echo -n "."; 
+sleep 5; done; 
+echo; echo "instance created, waiting for environment ${ENV_NAME} to be attached to instance"; 
+
+while : ; do export ATTACHMENT_DONE=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${GOOGLE_CLOUD_PROJECT}/instances/${INSTANCE_NAME}/attachments" | jq "select(.attachments != null) | .attachments[] | select(.environment == \"${ENV_NAME}\") | .environment" --join-output); [[ "${ATTACHMENT_DONE}" != "${ENV_NAME}" ]] || break; echo -n "."; 
+
+sleep 5; done; echo; echo "${ENV_NAME} environment attached, waiting for hello-world to be deployed"; 
+
+while : ; do export ATTACHMENT_DONE=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -X GET "https://apigee.googleapis.com/v1/organizations/${GOOGLE_CLOUD_PROJECT}/instances/${INSTANCE_NAME}/attachments" | jq "select(.attachments != null) | .attachments[] | select(.environment == \"${ENV_NAME}\") | .environment" --join-output); [[ "${ATTACHMENT_DONE}" != "${ENV_NAME}" ]] || break; echo -n "."; 
+
+sleep 5; done; echo "***ORG IS READY TO USE***";
+
+
+TEST THE SCENARIOS:
+--------------------------------
+1) 
+
+export VM_NAME=apigeex-test-vm
+export VM_ZONE=us-west1-a
+gcloud compute ssh ${VM_NAME} --zone=${VM_ZONE} --force-key-file-overwrite
+
+
+
+export PREV_STATUS_CODE=; echo "waiting for hello-world to be accessible"; while : ; 
+do export STATUS_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 5 -X GET "https://eval.example.com/hello-world"); [[ "${STATUS_CODE}" == "${PREV_STATUS_CODE}" ]] || (echo; echo "STATUS_CODE=${STATUS_CODE}"); 
+export PREV_STATUS_CODE=${STATUS_CODE}; [[ "${STATUS_CODE}" != "200" ]] || break; echo -n "."; 
+sleep 5; done; 
+echo; echo "***HELLO-WORLD IS ACCESSIBLE***";			  
+
+curl -i -k "https://eval.example.com/hello-world"
+
+
+curl -i -k -X POST "https://eval.example.com/hello-world" -H "Content-Type: application/json" -d '{ "ThisIsAReallyLongElementNameIMeanReallyReallyReallyLong": 42 }'
+
+curl -i -k "https://eval.example.com/hello-world?item=name'%20OR%20'a'='a"
+
+
+
+2) From Other Region:
+
+export SECOND_VM_NAME=apigeex-outside-us
+export SECOND_VM_ZONE=europe-west1-b
+gcloud compute ssh ${SECOND_VM_NAME} --zone=${SECOND_VM_ZONE} --force-key-file-overwrite
+
+
+
+curl -i -k "https://eval.example.com/hello-world"
+
+Monitor:
+----------------
+Cloud Console tab, navigate to Monitoring > Dashboards.
+Click Network Security Policies.
+This dashboard shows you the rate of allowed and blocked requests for all Cloud Armor policies. You currently have only one policy.
+In the Policies pane, click protect-apis.
